@@ -1,0 +1,24 @@
+[package]
+name = "egui-trace"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+axum = "0.6.16"
+axum-extra = { version = "0.7.4", features = ["protobuf"] }
+chrono = { version = "0.4", features = ["serde"] }
+eframe = { version = "0.21.0", features = ["dark-light"] }
+egui_dock = "0.4.2"
+egui_extras = "0.21.0"
+prost = "0.11.9"
+rfd = "0.11.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.27.0", features = ["full"] }
+tracing = "0.1.37"
+tracing-subscriber = "0.3.16"
+
+[build-dependencies]
+prost-build = "0.11.9"
