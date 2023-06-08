@@ -2,8 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use eframe::egui::Grid;
 use egui_extras::{Column as EguiColumn, TableBuilder};
-
-use crate::trace::Trace;
+use lib::Trace;
 
 #[derive(Debug, Default, PartialEq)]
 enum Column {

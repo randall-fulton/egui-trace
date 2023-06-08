@@ -1,22 +1,14 @@
 mod attributes;
 pub mod collector;
 pub mod list;
-pub mod otel;
 pub mod settings;
-pub mod trace;
 pub mod waterfall;
 
-pub mod proto {
-    include!(concat!(env!("OUT_DIR"), "/_includes.rs"));
-}
-
 use egui_dock::Tree;
+use lib::{Span, Trace, build_traces, parse_file};
 use tokio::sync::mpsc;
-use trace::{Span, Trace};
 
 use std::{
-    collections::HashMap,
-    io::Read,
     path::Path,
     sync::{Arc, Mutex},
     time::Duration,
@@ -74,7 +66,7 @@ struct TabViewer {
     settings: settings::Settings,
     traces: Arc<Mutex<Vec<Trace>>>,
 
-    collector: collector::panel::Collector,
+    collector: collector::Collector,
     list: list::TraceList,
 
     /// [`Tab`]s to be added/updated after previous frame.
@@ -86,7 +78,7 @@ impl TabViewer {
         Self {
             settings: Default::default(),
             traces: traces.clone(),
-            collector: collector::panel::Collector::new(traces.clone()),
+            collector: collector::Collector::new(traces.clone()),
             list: list::TraceList::new(traces),
             last_frame_tabs: Vec::new(),
         }
@@ -368,45 +360,4 @@ async fn collect_spans_and_recalculate(
         all_spans.append(&mut spans);
         (*traces) = build_traces(all_spans).expect("rebuild traces on collector message");
     }
-}
-
-fn parse_file(file_path: &Path) -> Result<Vec<Span>, String> {
-    let mut contents = String::new();
-    std::fs::File::open(file_path)
-        .and_then(|mut f| f.read_to_string(&mut contents))
-        .map_err(|e| e.to_string())?;
-    Ok(contents
-        .lines()
-        .enumerate()
-        .map(|(line, contents)| {
-            serde_json::from_str(contents).map_err(|e| {
-                dbg!(&contents);
-                format!("unable to parse line {line}: {e}", line = line + 1)
-            })
-        })
-        .collect::<Result<Vec<otel::Span>, _>>()?
-        .into_iter()
-        .map(Span::from)
-        .collect())
-}
-
-fn build_traces(spans: Vec<Span>) -> Result<Vec<Trace>, String> {
-    let (roots, rest): (Vec<Span>, Vec<Span>) =
-        spans.into_iter().partition(|s| s.parent_id.is_none());
-
-    let rest = rest.into_iter().fold(HashMap::new(), |mut m, span| {
-        m.entry(span.trace_id.clone())
-            .or_insert_with(Vec::new)
-            .push(span);
-        m
-    });
-
-    let traces = roots
-        .into_iter()
-        .map(|root| {
-            let descendants = rest.get(&root.trace_id).cloned().unwrap_or_default();
-            Trace::new(root, descendants)
-        })
-        .collect();
-    Ok(traces)
 }

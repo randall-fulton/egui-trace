@@ -7,7 +7,7 @@ use serde::Deserialize;
 /// Span as represented in tracing stream
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-pub(crate) struct Span {
+pub struct Span {
     pub name: String,
     #[serde(rename = "SpanContext")]
     pub context: SpanContext,
@@ -116,7 +116,7 @@ struct Library {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-pub(crate) struct SpanContext {
+pub struct SpanContext {
     #[serde(rename = "TraceID")]
     pub trace_id: String,
     #[serde(rename = "SpanID")]

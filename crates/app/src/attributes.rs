@@ -2,8 +2,7 @@ use eframe::{
     egui::{Grid, Layout, ScrollArea},
     emath::Align,
 };
-
-use crate::trace::Span;
+use lib::Span;
 
 pub(crate) struct Attributes {
     span: Span,

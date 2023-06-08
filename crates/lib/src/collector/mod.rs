@@ -14,7 +14,7 @@ struct CollectorState {
     tx: mpsc::Sender<Vec<crate::Span>>,
 }
 
-pub(crate) async fn run(
+pub async fn run(
     tx: mpsc::Sender<Vec<crate::Span>>,
     addr: SocketAddr,
 ) -> Result<(), String> {

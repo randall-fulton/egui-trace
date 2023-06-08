@@ -1,3 +1,3 @@
 [submodule "opentelemetry-proto"]
-	path = opentelemetry-proto
+	path = crates/lib/opentelemetry-proto
 	url = git@github.com:open-telemetry/opentelemetry-proto.git

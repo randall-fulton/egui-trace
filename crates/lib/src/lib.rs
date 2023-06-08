@@ -1,30 +1,78 @@
-use std::collections::{BTreeMap, HashMap};
+use std::{collections::{BTreeMap, HashMap}, path::Path, io::Read};
+
+pub mod collector;
+pub mod otel;
+
+pub mod proto {
+    include!(concat!(env!("OUT_DIR"), "/_includes.rs"));
+}
+
+pub fn parse_file(file_path: &Path) -> Result<Vec<Span>, String> {
+    let mut contents = String::new();
+    std::fs::File::open(file_path)
+        .and_then(|mut f| f.read_to_string(&mut contents))
+        .map_err(|e| e.to_string())?;
+    Ok(contents
+        .lines()
+        .enumerate()
+        .map(|(line, contents)| {
+            serde_json::from_str(contents).map_err(|e| {
+                dbg!(&contents);
+                format!("unable to parse line {line}: {e}", line = line + 1)
+            })
+        })
+        .collect::<Result<Vec<otel::Span>, _>>()?
+        .into_iter()
+        .map(Span::from)
+        .collect())
+}
+
+pub fn build_traces(spans: Vec<Span>) -> Result<Vec<Trace>, String> {
+    let (roots, rest): (Vec<Span>, Vec<Span>) =
+        spans.into_iter().partition(|s| s.parent_id.is_none());
+
+    let rest = rest.into_iter().fold(HashMap::new(), |mut m, span| {
+        m.entry(span.trace_id.clone())
+            .or_insert_with(Vec::new)
+            .push(span);
+        m
+    });
+
+    let traces = roots
+        .into_iter()
+        .map(|root| {
+            let descendants = rest.get(&root.trace_id).cloned().unwrap_or_default();
+            Trace::new(root, descendants)
+        })
+        .collect();
+    Ok(traces)
+}
 
 #[derive(Debug, Default, Clone)]
-pub(crate) struct Span {
-    pub(crate) id: String,
-    pub(crate) name: String,
-    pub(crate) start: chrono::DateTime<chrono::Utc>,
+pub struct Span {
+    pub id: String,
+    pub name: String,
+    pub start: chrono::DateTime<chrono::Utc>,
 
     /// Microsecond relative offset from beginning of root span.
-    pub(crate) offset_micros: i64,
+    pub offset_micros: i64,
 
     /// Microsecond duration of span.
-    pub(crate) duration_micros: i64,
+    pub duration_micros: i64,
 
     /// Depth within [`Trace`].
-    pub(crate) level: usize,
+    pub level: usize,
 
-    pub(crate) trace_id: String,
-    pub(crate) parent_id: Option<String>, // None == root span
-    pub(crate) attributes: BTreeMap<String, String>,
-    pub(crate) metadata: BTreeMap<String, String>,
+    pub trace_id: String,
+    pub parent_id: Option<String>, // None == root span
+    pub attributes: BTreeMap<String, String>,
+    pub metadata: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct Trace {
-    pub(crate) id: String,
-    pub(crate) spans: Vec<Span>,
+pub struct Trace {
+    pub id: String,
+    pub spans: Vec<Span>,
 
     /// Map from parent span to children
     #[allow(dead_code)]
@@ -32,7 +80,7 @@ pub(crate) struct Trace {
 }
 
 impl Trace {
-    pub(crate) fn new(root: Span, descendants: Vec<Span>) -> Self {
+    pub fn new(root: Span, descendants: Vec<Span>) -> Self {
         /// Build `Vec<Span>` in pre-order (for simpler rendering)
         fn build_tree_vec(
             id: &String,
@@ -99,4 +147,12 @@ impl Trace {
             connections,
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_works() {}
 }
