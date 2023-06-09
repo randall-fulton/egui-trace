@@ -4,11 +4,11 @@ use std::{
 };
 
 use eframe::egui::{self, Grid};
+use lib::Trace;
 use tokio::{sync::mpsc, task::JoinHandle};
 use tracing::error;
 
-use crate::collector::server::run;
-use crate::trace::Trace;
+use lib::collector::run;
 use crate::Panel;
 
 #[derive(Debug, Default)]

@@ -1,6 +1,5 @@
 use eframe::egui::*;
-
-use crate::trace::Trace;
+use lib::Trace;
 
 pub(crate) struct Waterfall {
     trace: Trace,
