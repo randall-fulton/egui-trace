@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: arduino/setup-protoc@v2
       - uses: taiki-e/create-gh-release-action@v1
         with:
           # (optional) Path to changelog.
