@@ -129,9 +129,13 @@ impl Trace {
             })
             .collect::<HashMap<_, _>>();
         let connections = descendants.values().fold(HashMap::new(), |mut m, span| {
-            m.entry(span.parent_id.clone().expect("Span should have a parent id"))
-                .or_insert_with(Vec::new)
-                .push(span.id.clone());
+            m.entry(
+                span.parent_id
+                    .clone()
+                    .expect("Span should have a parent id"),
+            )
+            .or_insert_with(Vec::new)
+            .push(span.id.clone());
             m
         });
 
