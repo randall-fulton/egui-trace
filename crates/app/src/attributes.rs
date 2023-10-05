@@ -26,7 +26,7 @@ impl crate::Panel for Attributes {
                     self.span.attributes.iter().for_each(|(key, value)| {
                         ui.label(format!("{key}:"));
                         ui.with_layout(Layout::right_to_left(Align::TOP), |ui| {
-                            ui.label(if !value.is_empty() { value } else { "-" });
+                            ui.label(if value.is_empty() { "-" } else { value });
                         });
                         ui.end_row();
                     });
@@ -40,7 +40,7 @@ impl crate::Panel for Attributes {
                     self.span.metadata.iter().for_each(|(key, value)| {
                         ui.label(format!("{key}:"));
                         ui.with_layout(Layout::right_to_left(Align::TOP), |ui| {
-                            ui.label(if !value.is_empty() { value } else { "-" });
+                            ui.label(if value.is_empty() { "-" } else { value });
                         });
                         ui.end_row();
                     });

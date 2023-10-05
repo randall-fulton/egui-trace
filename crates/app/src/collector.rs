@@ -8,8 +8,8 @@ use lib::Trace;
 use tokio::{sync::mpsc, task::JoinHandle};
 use tracing::error;
 
-use lib::collector::run;
 use crate::Panel;
+use lib::collector::run;
 
 #[derive(Debug, Default)]
 pub(crate) struct Collector {
@@ -76,7 +76,7 @@ impl Collector {
         }
     }
 
-    /// Start OTel collector endpoint.
+    /// Start `OTel` collector endpoint.
     fn start_collector(&mut self) -> Result<(), String> {
         use std::net::SocketAddr;
 

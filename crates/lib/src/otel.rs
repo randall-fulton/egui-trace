@@ -79,6 +79,7 @@ impl From<Span> for crate::Span {
 
 impl Span {
     /// Is current `RawSpan` the root of a trace
+    #[must_use]
     pub fn is_root(&self) -> bool {
         self.parent.trace_id.chars().all(|c| c == '0')
     }

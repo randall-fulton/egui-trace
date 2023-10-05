@@ -5,7 +5,7 @@ pub mod settings;
 pub mod waterfall;
 
 use egui_dock::Tree;
-use lib::{Span, Trace, build_traces, parse_file};
+use lib::{build_traces, parse_file, Span, Trace};
 use tokio::sync::mpsc;
 
 use std::{
@@ -76,7 +76,7 @@ struct TabViewer {
 impl TabViewer {
     fn new(traces: Arc<Mutex<Vec<Trace>>>) -> Self {
         Self {
-            settings: Default::default(),
+            settings: crate::settings::Settings::default(),
             traces: traces.clone(),
             collector: collector::Collector::new(traces.clone()),
             list: list::TraceList::new(traces),
@@ -138,8 +138,9 @@ impl egui_dock::TabViewer for TabViewer {
                     .lock()
                     .unwrap()
                     .get(*trace_idx)
-                    .map(|trace| trace.spans[*span_idx].id.clone())
-                    .unwrap_or("<unknown>".to_string())
+                    .map_or("<unknown>".to_string(), |trace| trace.spans[*span_idx]
+                        .id
+                        .clone())
             ),
             Tab::TraceList => "Traces".into(),
             Tab::TraceDetails(idx) => format!(
@@ -148,8 +149,7 @@ impl egui_dock::TabViewer for TabViewer {
                     .lock()
                     .unwrap()
                     .get(*idx)
-                    .map(|trace| trace.id.clone())
-                    .unwrap_or("<unknown>".to_string())
+                    .map_or("<unknown>".to_string(), |trace| trace.id.clone())
             ),
         };
         title.into()
@@ -167,12 +167,12 @@ pub struct App {
 
 impl Default for App {
     fn default() -> Self {
-        let traces: Arc<Mutex<Vec<Trace>>> = Default::default();
+        let traces: Arc<Mutex<Vec<Trace>>> = Arc::default();
         Self {
-            error: Default::default(),
+            error: Option::default(),
             traces: traces.clone(),
             viewer: TabViewer::new(traces),
-            tree: Default::default(),
+            tree: Tree::default(),
         }
     }
 }
@@ -183,7 +183,7 @@ impl eframe::App for App {
 
         egui::CentralPanel::default().show(ctx, |ui| {
             if self.tree.is_empty() {
-                self.landing(ctx, frame);
+                App::landing(ctx, frame);
 
                 if !self.traces.lock().unwrap().is_empty() {
                     self.tree.push_to_focused_leaf(Tab::TraceList);
@@ -203,9 +203,7 @@ impl eframe::App for App {
         });
 
         ctx.input(|i| {
-            if let Err(err) = self.handle_input(i) {
-                error!(err, "handling user input");
-            }
+            self.handle_input(i);
         });
     }
 }
@@ -220,7 +218,7 @@ impl App {
                         self.error = self.pick_file().map_err(String::from).err();
                     }
                     if ui.button("Exit").clicked() {
-                        frame.close()
+                        frame.close();
                     }
                 });
 
@@ -245,7 +243,7 @@ impl App {
         });
     }
 
-    fn landing(&self, ctx: &eframe::egui::Context, _frame: &mut eframe::Frame) {
+    fn landing(ctx: &eframe::egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.with_layout(
                 Layout::centered_and_justified(egui::Direction::TopDown),
@@ -275,7 +273,7 @@ impl App {
                         *existing_trace_idx = trace_idx;
                         *existing_span_idx = span_idx;
                     } else {
-                        error!("found span attributes tab that can't be destructured")
+                        error!("found span attributes tab that can't be destructured");
                     }
                 } else if let Some((active_node_idx, _)) = self
                     .tree
@@ -300,10 +298,8 @@ impl App {
         }
     }
 
-    /// Process user actions. User-actionable errors are set in
-    /// [`Self::error`]. If an `Err()` is returned here, it is not
-    /// something we expect the user to be able to fix.
-    fn handle_input(&mut self, i: &InputState) -> Result<(), String> {
+    /// Process user actions. User-actionable errors are set in [`Self::error`].
+    fn handle_input(&mut self, i: &InputState) {
         if i.key_down(egui::Key::O) && i.modifiers.ctrl {
             self.error = self.pick_file().map_err(String::from).err();
         }
@@ -322,7 +318,6 @@ impl App {
                 }
             }
         }
-        Ok(())
     }
 
     fn load_traces_from_file(&mut self, file_path: &Path) -> Result<(), String> {

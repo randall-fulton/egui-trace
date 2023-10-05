@@ -12,7 +12,7 @@ I haven't had the time to setup an actual release process, so you'll have to bui
 1. Install [protoc]() (used to generate the OTel-compatible collector).
 
 ```
-git clone --recurse-submodules git://github.com/randall-fulton/egui-trace.git
+git clone --recurse-submodules git@github.com:randall-fulton/egui-trace.git
 cd egui-trace
 cargo install --path=.
 ```

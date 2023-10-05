@@ -1,4 +1,7 @@
-use eframe::egui::*;
+use eframe::egui::{
+    Align, Color32, Frame, Grid, Layout, Response, Rounding, ScrollArea, Sense, Stroke, Style, Ui,
+    Vec2, Widget,
+};
 use lib::Trace;
 
 pub(crate) struct Waterfall {
@@ -26,6 +29,7 @@ impl crate::Panel for Waterfall {
         ui.heading(format!("Trace: {}", self.trace.id.clone()));
 
         let mut action = None;
+        #[allow(clippy::cast_precision_loss)]
         ScrollArea::vertical().show(ui, |ui| {
             Grid::new("trace_waterfall")
                 .num_columns(3)
@@ -59,11 +63,11 @@ impl crate::Panel for Waterfall {
                                         .round_radius(2.0),
                                     );
                                     if ui.link(&span.name).clicked() {
-                                        action = Some(crate::Action::OpenSpanAttributes(i))
+                                        action = Some(crate::Action::OpenSpanAttributes(i));
                                     }
                                 });
                             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                                ui.label(format!("{} ms", duration_ms));
+                                ui.label(format!("{duration_ms} ms"));
                             });
                             ui.add(
                                 Bar::new(BarMode::Relative, width, offset, 20.0, *color)

@@ -1,4 +1,8 @@
-use std::{collections::{BTreeMap, HashMap}, path::Path, io::Read};
+use std::{
+    collections::{BTreeMap, HashMap},
+    io::Read,
+    path::Path,
+};
 
 pub mod collector;
 pub mod otel;
@@ -80,6 +84,9 @@ pub struct Trace {
 }
 
 impl Trace {
+    #[must_use]
+    /// # Panics
+    /// If we unexpectedly ask for the `parent_id` of a span without a parent.
     pub fn new(root: Span, descendants: Vec<Span>) -> Self {
         /// Build `Vec<Span>` in pre-order (for simpler rendering)
         fn build_tree_vec(
@@ -96,7 +103,7 @@ impl Trace {
                     .map(|child_id| spans.get(child_id).cloned().expect("id to exist in spans"))
                     .collect::<Vec<_>>();
                 children.sort_by_key(|child| child.start);
-                for mut child in children.into_iter() {
+                for mut child in children {
                     let id = child.id.clone();
                     child.level = level + 1;
                     more_spans.push(child);
@@ -122,7 +129,7 @@ impl Trace {
             })
             .collect::<HashMap<_, _>>();
         let connections = descendants.values().fold(HashMap::new(), |mut m, span| {
-            m.entry(span.parent_id.clone().unwrap())
+            m.entry(span.parent_id.clone().expect("Span should have a parent id"))
                 .or_insert_with(Vec::new)
                 .push(span.id.clone());
             m
@@ -147,12 +154,4 @@ impl Trace {
             connections,
         }
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {}
 }
