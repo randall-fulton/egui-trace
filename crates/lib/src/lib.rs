@@ -85,6 +85,8 @@ pub struct Trace {
 
 impl Trace {
     #[must_use]
+    /// # Panics
+    /// If we unexpectedly ask for the `parent_id` of a span without a parent.
     pub fn new(root: Span, descendants: Vec<Span>) -> Self {
         /// Build `Vec<Span>` in pre-order (for simpler rendering)
         fn build_tree_vec(
@@ -127,7 +129,7 @@ impl Trace {
             })
             .collect::<HashMap<_, _>>();
         let connections = descendants.values().fold(HashMap::new(), |mut m, span| {
-            m.entry(span.parent_id.clone().unwrap())
+            m.entry(span.parent_id.clone().expect("Span should have a parent id"))
                 .or_insert_with(Vec::new)
                 .push(span.id.clone());
             m

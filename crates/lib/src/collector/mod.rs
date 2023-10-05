@@ -14,6 +14,8 @@ struct CollectorState {
     tx: mpsc::Sender<Vec<crate::Span>>,
 }
 
+/// # Errors
+/// If the server encounters an error
 pub async fn run(tx: mpsc::Sender<Vec<crate::Span>>, addr: SocketAddr) -> Result<(), String> {
     let app = Router::new()
         .route("/v1/traces", post(export_trace))
@@ -36,7 +38,7 @@ async fn export_trace(
         .resource_spans
         .into_iter()
         .flat_map(|resource_span| {
-            let metadata = map_attributes(resource_span.resource.unwrap_or_default().attributes);
+            let metadata = map_attributes(&resource_span.resource.unwrap_or_default().attributes);
             resource_span
                 .scope_spans
                 .into_iter()
@@ -45,7 +47,7 @@ async fn export_trace(
         })
         .flat_map(|(scope_span, mut metadata)| {
             let mut scope_metadata =
-                map_attributes(scope_span.scope.clone().unwrap_or_default().attributes);
+                map_attributes(&scope_span.scope.clone().unwrap_or_default().attributes);
             metadata.append(&mut scope_metadata);
             scope_span
                 .spans
@@ -54,11 +56,13 @@ async fn export_trace(
                 .collect::<Vec<_>>()
         })
         .map(|(raw, metadata)| {
+            #[allow(clippy::cast_possible_wrap)]
             let start = chrono::NaiveDateTime::from_timestamp_opt(
                 (raw.start_time_unix_nano / 1_000_000_000) as i64,
                 (raw.start_time_unix_nano % 1_000_000_000) as u32,
             )
             .expect("valid unix nano start time");
+            #[allow(clippy::cast_possible_wrap)]
             let end = chrono::NaiveDateTime::from_timestamp_opt(
                 (raw.end_time_unix_nano / 1_000_000_000) as i64,
                 (raw.end_time_unix_nano % 1_000_000_000) as u32,
@@ -84,7 +88,9 @@ async fn export_trace(
                             .expect("trace_id of 16 bytes"),
                     )
                 ),
-                parent_id: if !raw.parent_span_id.is_empty() {
+                parent_id: if raw.parent_span_id.is_empty() {
+                    None
+                } else {
                     Some(format!(
                         "{:x}",
                         u64::from_be_bytes(
@@ -94,10 +100,8 @@ async fn export_trace(
                                 .expect("parent_span_id of 8 bytes"),
                         )
                     ))
-                } else {
-                    None
                 },
-                attributes: map_attributes(raw.attributes),
+                attributes: map_attributes(&raw.attributes),
                 metadata,
                 ..Default::default()
             }
@@ -150,7 +154,7 @@ fn any_value_to_string(av: &AnyValue) -> String {
 }
 
 #[inline]
-fn map_attributes(attributes: Vec<KeyValue>) -> BTreeMap<String, String> {
+fn map_attributes(attributes: &[KeyValue]) -> BTreeMap<String, String> {
     attributes
         .iter()
         .map(|KeyValue { key, value }| {

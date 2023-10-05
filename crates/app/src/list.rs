@@ -35,7 +35,7 @@ pub(crate) struct TraceList {
 impl TraceList {
     pub(crate) fn new(traces: Arc<Mutex<Vec<Trace>>>) -> Self {
         Self {
-            state: Default::default(),
+            state: State::default(),
             traces,
         }
     }
@@ -59,7 +59,7 @@ impl crate::Panel for TraceList {
             Column::Id => visible_traces.sort_by_key(|(_, trace)| &trace.id),
             Column::Name => visible_traces.sort_by_key(|(_, trace)| &trace.spans[0].name),
             Column::Duration => {
-                visible_traces.sort_by_key(|(_, trace)| trace.spans[0].duration_micros)
+                visible_traces.sort_by_key(|(_, trace)| trace.spans[0].duration_micros);
             }
             Column::Start => visible_traces.sort_by_key(|(_, trace)| trace.spans[0].start),
         }

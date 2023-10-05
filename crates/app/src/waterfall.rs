@@ -29,6 +29,7 @@ impl crate::Panel for Waterfall {
         ui.heading(format!("Trace: {}", self.trace.id.clone()));
 
         let mut action = None;
+        #[allow(clippy::cast_precision_loss)]
         ScrollArea::vertical().show(ui, |ui| {
             Grid::new("trace_waterfall")
                 .num_columns(3)
@@ -62,7 +63,7 @@ impl crate::Panel for Waterfall {
                                         .round_radius(2.0),
                                     );
                                     if ui.link(&span.name).clicked() {
-                                        action = Some(crate::Action::OpenSpanAttributes(i))
+                                        action = Some(crate::Action::OpenSpanAttributes(i));
                                     }
                                 });
                             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
