@@ -5,7 +5,7 @@ pub mod settings;
 pub mod waterfall;
 
 use egui_dock::Tree;
-use lib::{Span, Trace, build_traces, parse_file};
+use lib::{build_traces, parse_file, Span, Trace};
 use tokio::sync::mpsc;
 
 use std::{
@@ -138,8 +138,9 @@ impl egui_dock::TabViewer for TabViewer {
                     .lock()
                     .unwrap()
                     .get(*trace_idx)
-                    .map(|trace| trace.spans[*span_idx].id.clone())
-                    .unwrap_or("<unknown>".to_string())
+                    .map_or("<unknown>".to_string(), |trace| trace.spans[*span_idx]
+                        .id
+                        .clone())
             ),
             Tab::TraceList => "Traces".into(),
             Tab::TraceDetails(idx) => format!(
@@ -148,8 +149,7 @@ impl egui_dock::TabViewer for TabViewer {
                     .lock()
                     .unwrap()
                     .get(*idx)
-                    .map(|trace| trace.id.clone())
-                    .unwrap_or("<unknown>".to_string())
+                    .map_or("<unknown>".to_string(), |trace| trace.id.clone())
             ),
         };
         title.into()

@@ -1,4 +1,7 @@
-use eframe::egui::*;
+use eframe::egui::{
+    Align, Color32, Frame, Grid, Layout, Response, Rounding, ScrollArea, Sense, Stroke, Style, Ui,
+    Vec2, Widget,
+};
 use lib::Trace;
 
 pub(crate) struct Waterfall {
@@ -63,7 +66,7 @@ impl crate::Panel for Waterfall {
                                     }
                                 });
                             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                                ui.label(format!("{} ms", duration_ms));
+                                ui.label(format!("{duration_ms} ms"));
                             });
                             ui.add(
                                 Bar::new(BarMode::Relative, width, offset, 20.0, *color)

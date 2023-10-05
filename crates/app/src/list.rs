@@ -118,7 +118,7 @@ impl crate::Panel for TraceList {
                 });
             })
             .body(|mut body| {
-                visible_traces.iter().for_each(|(i, trace)| {
+                for (i, trace) in &visible_traces {
                     body.row(20.0, |mut row| {
                         row.col(|ui| {
                             if ui.link(&trace.id).clicked() {
@@ -138,7 +138,7 @@ impl crate::Panel for TraceList {
                             ));
                         });
                     });
-                });
+                }
             });
         action
     }

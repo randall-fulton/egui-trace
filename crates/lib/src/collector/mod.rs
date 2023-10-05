@@ -14,10 +14,7 @@ struct CollectorState {
     tx: mpsc::Sender<Vec<crate::Span>>,
 }
 
-pub async fn run(
-    tx: mpsc::Sender<Vec<crate::Span>>,
-    addr: SocketAddr,
-) -> Result<(), String> {
+pub async fn run(tx: mpsc::Sender<Vec<crate::Span>>, addr: SocketAddr) -> Result<(), String> {
     let app = Router::new()
         .route("/v1/traces", post(export_trace))
         .with_state(Arc::new(CollectorState { tx }));
@@ -73,7 +70,10 @@ async fn export_trace(
                     u64::from_be_bytes(raw.span_id.clone().try_into().expect("span_id of 8 bytes"),)
                 ),
                 name: raw.name.clone(),
-                start: chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(start, chrono::Utc),
+                start: chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(
+                    start,
+                    chrono::Utc,
+                ),
                 duration_micros: end.timestamp_micros() - start.timestamp_micros(),
                 trace_id: format!(
                     "{:x}",
@@ -131,10 +131,7 @@ fn any_value_to_string(av: &AnyValue) -> String {
                 .iter()
                 .map(|KeyValue { key, value }| format!(
                     "{key}: {}",
-                    value
-                        .as_ref()
-                        .map(any_value_to_string)
-                        .unwrap_or("null".into())
+                    value.as_ref().map_or("null".into(), any_value_to_string)
                 ))
                 .collect::<Vec<String>>()
                 .join(", ")
@@ -143,12 +140,12 @@ fn any_value_to_string(av: &AnyValue) -> String {
             format!(
                 "[{}]",
                 val.iter()
-                    .map(|v| v.to_string())
+                    .map(std::string::ToString::to_string)
                     .collect::<Vec<String>>()
                     .join(", ")
             )
         }
-        _ => "".into(),
+        _ => String::new(),
     }
 }
 

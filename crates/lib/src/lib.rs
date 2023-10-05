@@ -1,4 +1,8 @@
-use std::{collections::{BTreeMap, HashMap}, path::Path, io::Read};
+use std::{
+    collections::{BTreeMap, HashMap},
+    io::Read,
+    path::Path,
+};
 
 pub mod collector;
 pub mod otel;
@@ -80,6 +84,7 @@ pub struct Trace {
 }
 
 impl Trace {
+    #[must_use]
     pub fn new(root: Span, descendants: Vec<Span>) -> Self {
         /// Build `Vec<Span>` in pre-order (for simpler rendering)
         fn build_tree_vec(
@@ -96,7 +101,7 @@ impl Trace {
                     .map(|child_id| spans.get(child_id).cloned().expect("id to exist in spans"))
                     .collect::<Vec<_>>();
                 children.sort_by_key(|child| child.start);
-                for mut child in children.into_iter() {
+                for mut child in children {
                     let id = child.id.clone();
                     child.level = level + 1;
                     more_spans.push(child);
