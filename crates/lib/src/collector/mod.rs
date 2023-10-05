@@ -73,7 +73,7 @@ async fn export_trace(
                     u64::from_be_bytes(raw.span_id.clone().try_into().expect("span_id of 8 bytes"),)
                 ),
                 name: raw.name.clone(),
-                start: chrono::DateTime::<chrono::Utc>::from_utc(start, chrono::Utc),
+                start: chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(start, chrono::Utc),
                 duration_micros: end.timestamp_micros() - start.timestamp_micros(),
                 trace_id: format!(
                     "{:x}",
