@@ -35,10 +35,8 @@ pub fn build_traces(spans: Vec<Span>) -> Result<Vec<Trace>, String> {
     let (roots, rest): (Vec<Span>, Vec<Span>) =
         spans.into_iter().partition(|s| s.parent_id.is_none());
 
-    let rest = rest.into_iter().fold(HashMap::new(), |mut m, span| {
-        m.entry(span.trace_id.clone())
-            .or_insert_with(Vec::new)
-            .push(span);
+    let rest: HashMap<String, Vec<Span>> = rest.into_iter().fold(HashMap::new(), |mut m, span| {
+        m.entry(span.trace_id.clone()).or_default().push(span);
         m
     });
 
@@ -128,27 +126,28 @@ impl Trace {
                 (span.id.clone(), span)
             })
             .collect::<HashMap<_, _>>();
-        let connections = descendants.values().fold(HashMap::new(), |mut m, span| {
-            m.entry(
-                span.parent_id
-                    .clone()
-                    .expect("Span should have a parent id"),
-            )
-            .or_insert_with(Vec::new)
-            .push(span.id.clone());
-            m
-        });
+        let connections: HashMap<String, Vec<String>> =
+            descendants.values().fold(HashMap::new(), |mut m, span| {
+                m.entry(
+                    span.parent_id
+                        .clone()
+                        .expect("Span should have a parent id"),
+                )
+                .or_default()
+                .push(span.id.clone());
+                m
+            });
 
         // build in render order
         let descendants =
             build_tree_vec(&root.id, &connections, &descendants, vec![root.clone()], 0);
         // use descendant index in lookup
-        let connections =
+        let connections: HashMap<String, Vec<usize>> =
             descendants
                 .iter()
                 .enumerate()
                 .fold(HashMap::new(), |mut acc, (i, span)| {
-                    acc.entry(span.id.clone()).or_insert_with(Vec::new).push(i);
+                    acc.entry(span.id.clone()).or_default().push(i);
                     acc
                 });
 
@@ -157,5 +156,43 @@ impl Trace {
             spans: descendants,
             connections,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn build_traces() -> Result<(), String> {
+        let spans = vec![
+            crate::Span {
+                trace_id: "one".to_string(),
+                id: "one_root".to_string(),
+                ..crate::Span::default()
+            },
+            crate::Span {
+                trace_id: "one".to_string(),
+                parent_id: Some("one_root".to_string()),
+                id: "one_child".to_string(),
+                ..crate::Span::default()
+            },
+            crate::Span {
+                trace_id: "two".to_string(),
+                ..crate::Span::default()
+            },
+        ];
+        let traces = super::build_traces(spans)?;
+        assert_eq!(traces.len(), 2);
+        assert_eq!(traces[0].id, "one".to_string());
+        assert_eq!(
+            traces[0]
+                .spans
+                .iter()
+                .map(|s| s.id.clone())
+                .collect::<Vec<_>>(),
+            vec!["one_root".to_string(), "one_child".to_string()]
+        );
+
+        assert_eq!(traces[1].id, "two".to_string());
+        Ok(())
     }
 }
