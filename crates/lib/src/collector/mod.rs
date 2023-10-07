@@ -163,3 +163,143 @@ fn map_attributes(attributes: &[KeyValue]) -> BTreeMap<String, String> {
         })
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    mod export_trace {
+        use crate::proto::opentelemetry::proto::{
+            common::v1::InstrumentationScope,
+            resource::v1::Resource,
+            trace::v1::{ResourceSpans, ScopeSpans, Span},
+        };
+
+        use super::super::*;
+        use tokio;
+
+        #[tokio::test]
+        async fn empty_request() {
+            let (tx, _rx) = mpsc::channel(1);
+            let state = Arc::new(CollectorState { tx });
+            let payload = ExportTraceServiceRequest {
+                resource_spans: vec![],
+            };
+            let Protobuf(res) = export_trace(State(state), Protobuf(payload)).await;
+            let success = res.partial_success.unwrap_or_default();
+            assert_eq!(success.rejected_spans, 0);
+        }
+
+        #[tokio::test]
+        async fn single_span_no_metadata() -> Result<(), String> {
+            let (tx, mut rx) = mpsc::channel(1);
+            let state = Arc::new(CollectorState { tx });
+            let payload = ExportTraceServiceRequest {
+                resource_spans: vec![ResourceSpans {
+                    scope_spans: vec![ScopeSpans {
+                        spans: vec![Span {
+                            trace_id: [0; 16].to_vec(),
+                            span_id: [0; 8].to_vec(),
+                            name: "Test".to_string(),
+                            start_time_unix_nano: 0,
+                            end_time_unix_nano: 1_000_000,
+                            ..Span::default()
+                        }],
+                        ..ScopeSpans::default()
+                    }],
+                    ..ResourceSpans::default()
+                }],
+            };
+            let Protobuf(res) = export_trace(State(state), Protobuf(payload)).await;
+            let success = res.partial_success.unwrap_or_default();
+            assert_eq!(success.rejected_spans, 0);
+
+            let spans = rx.try_recv().map_err(|_| "span not available on channel")?;
+            assert_eq!(spans.len(), 1);
+            assert_eq!(&spans[0].name, "Test");
+
+            Ok(())
+        }
+
+        #[tokio::test]
+        async fn single_span_with_metadata() -> Result<(), String> {
+            let (tx, mut rx) = mpsc::channel(1);
+            let state = Arc::new(CollectorState { tx });
+            let payload = ExportTraceServiceRequest {
+                resource_spans: vec![ResourceSpans {
+                    resource: Some(Resource {
+                        attributes: vec![KeyValue {
+                            key: "library".to_string(),
+                            value: Some(AnyValue {
+                                value: Some(any_value::Value::StringValue(
+                                    "egui-trace".to_string(),
+                                )),
+                            }),
+                        }],
+                        ..Resource::default()
+                    }),
+                    scope_spans: vec![ScopeSpans {
+                        scope: Some(InstrumentationScope {
+                            name: "collector".to_string(),
+                            version: "v0.0.1".to_string(),
+                            attributes: vec![KeyValue {
+                                key: "method".to_string(),
+                                value: Some(AnyValue {
+                                    value: Some(any_value::Value::StringValue(
+                                        "generated".to_string(),
+                                    )),
+                                }),
+                            }],
+                            ..InstrumentationScope::default()
+                        }),
+                        spans: vec![Span {
+                            trace_id: [0; 16].to_vec(),
+                            span_id: [0; 8].to_vec(),
+                            name: "Test".to_string(),
+                            start_time_unix_nano: 0,
+                            end_time_unix_nano: 1_000_000,
+                            attributes: vec![KeyValue {
+                                key: "cache.hit".to_string(),
+                                value: Some(AnyValue {
+                                    value: Some(any_value::Value::BoolValue(true)),
+                                }),
+                            }],
+                            ..Span::default()
+                        }],
+                        ..ScopeSpans::default()
+                    }],
+                    ..ResourceSpans::default()
+                }],
+            };
+            let Protobuf(res) = export_trace(State(state), Protobuf(payload)).await;
+            let success = res.partial_success.unwrap_or_default();
+            assert_eq!(success.rejected_spans, 0);
+
+            let spans = rx.try_recv().map_err(|_| "span not available on channel")?;
+            assert_eq!(spans.len(), 1);
+
+            let span = &spans[0];
+            assert_eq!(&span.name, "Test");
+            assert_eq!(span.metadata.len(), 2);
+            assert_eq!(
+                span.metadata
+                    .get("library")
+                    .ok_or("resource attribute not in metadata")?,
+                &"egui-trace".to_string()
+            );
+            assert_eq!(
+                span.metadata
+                    .get("method")
+                    .ok_or("instrumentation scope attribute not in metadata")?,
+                &"generated".to_string()
+            );
+            assert_eq!(span.attributes.len(), 1);
+            assert_eq!(
+                span.attributes
+                    .get("cache.hit")
+                    .ok_or("missing span attribute")?,
+                &"true".to_string()
+            );
+
+            Ok(())
+        }
+    }
+}
