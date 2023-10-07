@@ -3,10 +3,12 @@ use std::{collections::BTreeMap, net::SocketAddr, sync::Arc};
 use axum::{extract::State, routing::post, Router, Server};
 use axum_extra::protobuf::Protobuf;
 use tokio::sync::mpsc;
-use tracing::debug;
+use tracing::{debug, error};
 
 use crate::proto::opentelemetry::proto::{
-    collector::trace::v1::{ExportTraceServiceRequest, ExportTraceServiceResponse},
+    collector::trace::v1::{
+        ExportTracePartialSuccess, ExportTraceServiceRequest, ExportTraceServiceResponse,
+    },
     common::v1::{any_value, AnyValue, KeyValue},
 };
 
@@ -34,7 +36,7 @@ async fn export_trace(
     Protobuf(payload): Protobuf<ExportTraceServiceRequest>,
 ) -> Protobuf<ExportTraceServiceResponse> {
     // TODO: add more to metadata
-    let spans = payload
+    let scope_spans = payload
         .resource_spans
         .into_iter()
         .flat_map(|resource_span| {
@@ -44,72 +46,43 @@ async fn export_trace(
                 .into_iter()
                 .map(|s| (s, metadata.clone()))
                 .collect::<Vec<(_, _)>>()
-        })
-        .flat_map(|(scope_span, mut metadata)| {
-            let mut scope_metadata =
+        });
+    let raw_spans = scope_spans
+        .flat_map(|(scope_span, metadata)| {
+            let scope_metadata =
                 map_attributes(&scope_span.scope.clone().unwrap_or_default().attributes);
-            metadata.append(&mut scope_metadata);
             scope_span
                 .spans
                 .into_iter()
-                .map(|span| (span, metadata.clone()))
+                .map(|span| (span, metadata.clone(), scope_metadata.clone()))
                 .collect::<Vec<_>>()
         })
-        .map(|(raw, metadata)| {
-            #[allow(clippy::cast_possible_wrap)]
-            let start = chrono::NaiveDateTime::from_timestamp_opt(
-                (raw.start_time_unix_nano / 1_000_000_000) as i64,
-                (raw.start_time_unix_nano % 1_000_000_000) as u32,
-            )
-            .expect("valid unix nano start time");
-            #[allow(clippy::cast_possible_wrap)]
-            let end = chrono::NaiveDateTime::from_timestamp_opt(
-                (raw.end_time_unix_nano / 1_000_000_000) as i64,
-                (raw.end_time_unix_nano % 1_000_000_000) as u32,
-            )
-            .expect("valid unix nano end time");
-            crate::Span {
-                id: format!(
-                    "{:x}",
-                    u64::from_be_bytes(raw.span_id.clone().try_into().expect("span_id of 8 bytes"),)
-                ),
-                name: raw.name.clone(),
-                start: chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(
-                    start,
-                    chrono::Utc,
-                ),
-                duration_micros: end.timestamp_micros() - start.timestamp_micros(),
-                trace_id: format!(
-                    "{:x}",
-                    u128::from_be_bytes(
-                        raw.trace_id
-                            .clone()
-                            .try_into()
-                            .expect("trace_id of 16 bytes"),
-                    )
-                ),
-                parent_id: if raw.parent_span_id.is_empty() {
-                    None
-                } else {
-                    Some(format!(
-                        "{:x}",
-                        u64::from_be_bytes(
-                            raw.parent_span_id
-                                .clone()
-                                .try_into()
-                                .expect("parent_span_id of 8 bytes"),
-                        )
-                    ))
-                },
-                attributes: map_attributes(&raw.attributes),
-                metadata,
-                ..Default::default()
+        .collect::<Vec<_>>();
+
+    let mut spans = Vec::new();
+    let mut error_message = String::new();
+    let mut rejected_spans = 0i64;
+    for (raw_span, res_meta, scope_meta) in raw_spans.into_iter() {
+        let attributes = map_attributes(&raw_span.attributes);
+        let span = crate::Span::new(raw_span, attributes, res_meta, scope_meta);
+        match span {
+            Ok(span) => spans.push(span),
+            Err(msg) => {
+                error!("{msg}");
+                error_message.push_str(&format!("{msg}\n"));
+                rejected_spans += 1;
             }
-        })
-        .collect::<Vec<crate::Span>>();
+        }
+    }
+
     _ = state.tx.send(spans).await;
 
-    let response = ExportTraceServiceResponse::default();
+    let response = ExportTraceServiceResponse {
+        partial_success: Some(ExportTracePartialSuccess {
+            rejected_spans,
+            error_message,
+        }),
+    };
     Protobuf(response)
 }
 

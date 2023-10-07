@@ -93,20 +93,20 @@ impl egui_dock::TabViewer for TabViewer {
             Tab::Appearance => (None, settings::Panel(&mut self.settings).draw(ui)),
             Tab::Collector => (None, self.collector.draw(ui)),
             Tab::SpanAttributes(trace_idx, span_idx) => {
-                let trace = self
-                    .traces
-                    .lock()
-                    .unwrap()
-                    .get(*trace_idx)
-                    .cloned()
-                    .unwrap();
-                let span = trace.spans[*span_idx].clone();
-                (Some(*trace_idx), attributes::Attributes::new(span).draw(ui))
+                if let Some(trace) = self.traces.lock().unwrap().get(*trace_idx).cloned() {
+                    let span = trace.spans[*span_idx].clone();
+                    (Some(*trace_idx), attributes::Attributes::new(span).draw(ui))
+                } else {
+                    (None, None)
+                }
             }
             Tab::TraceList => (None, self.list.draw(ui)),
             Tab::TraceDetails(idx) => {
-                let trace = self.traces.lock().unwrap().get(*idx).cloned().unwrap();
-                (Some(*idx), waterfall::Waterfall::new(trace).draw(ui))
+                if let Some(trace) = self.traces.lock().unwrap().get(*idx).cloned() {
+                    (Some(*idx), waterfall::Waterfall::new(trace).draw(ui))
+                } else {
+                    (None, None)
+                }
             }
         };
         if let Some(action) = action {
@@ -138,9 +138,8 @@ impl egui_dock::TabViewer for TabViewer {
                     .lock()
                     .unwrap()
                     .get(*trace_idx)
-                    .map_or("<unknown>".to_string(), |trace| trace.spans[*span_idx]
-                        .id
-                        .clone())
+                    .and_then(|trace| trace.spans.get(*span_idx))
+                    .map_or("<unknown>".to_string(), |span| span.id.clone())
             ),
             Tab::TraceList => "Traces".into(),
             Tab::TraceDetails(idx) => format!(
@@ -353,6 +352,11 @@ async fn collect_spans_and_recalculate(
             .flat_map(|trace| trace.spans.clone())
             .collect::<Vec<_>>();
         all_spans.append(&mut spans);
-        (*traces) = build_traces(all_spans).expect("rebuild traces on collector message");
+
+        let res = build_traces(all_spans);
+        match res {
+            Ok(res) => (*traces) = res,
+            Err(msg) => error!("rebuilding traces on collector ingestions: {msg}"),
+        }
     }
 }
