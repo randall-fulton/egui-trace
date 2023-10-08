@@ -11,6 +11,10 @@ pub mod proto {
     include!(concat!(env!("OUT_DIR"), "/_includes.rs"));
 }
 
+use tracing::error;
+
+use crate::proto::opentelemetry::proto::trace::v1::Span as RawSpan;
+
 pub fn parse_file(file_path: &Path) -> Result<Vec<Span>, String> {
     let mut contents = String::new();
     std::fs::File::open(file_path)
@@ -71,6 +75,74 @@ pub struct Span {
     pub metadata: BTreeMap<String, String>,
 }
 
+impl Span {
+    pub(crate) fn new(
+        raw: RawSpan,
+        attributes: BTreeMap<String, String>,
+        resource_attributes: BTreeMap<String, String>,
+        instrument_attributes: BTreeMap<String, String>,
+    ) -> Result<Self, String> {
+        #[allow(clippy::cast_possible_wrap)]
+        let datetime_from_nanos = |nanos: u64| {
+            chrono::NaiveDateTime::from_timestamp_opt(
+                (nanos / 1_000_000_000) as i64,
+                (nanos % 1_000_000_000) as u32,
+            )
+        };
+        let start = datetime_from_nanos(raw.start_time_unix_nano)
+            .ok_or(format!("invalid start time {}", raw.start_time_unix_nano))?;
+        let end = datetime_from_nanos(raw.end_time_unix_nano)
+            .ok_or(format!("invalid end time {}", raw.end_time_unix_nano))?;
+
+        let id = format!(
+            "{:x}",
+            u64::from_be_bytes(
+                raw.span_id
+                    .clone()
+                    .try_into()
+                    .map_err(|_| "span_id of 8 bytes")?
+            )
+        );
+        let trace_id = format!(
+            "{:x}",
+            u128::from_be_bytes(
+                raw.trace_id
+                    .clone()
+                    .try_into()
+                    .map_err(|_| "trace_id of 16 bytes")?
+            )
+        );
+        let parent_id = if raw.parent_span_id.is_empty() {
+            None
+        } else {
+            Some(format!(
+                "{:x}",
+                u64::from_be_bytes(
+                    raw.parent_span_id
+                        .clone()
+                        .try_into()
+                        .map_err(|_| "parent_span_id of 8 bytes")?
+                )
+            ))
+        };
+
+        let mut metadata = resource_attributes;
+        metadata.extend(instrument_attributes);
+
+        Ok(Self {
+            id,
+            name: raw.name.clone(),
+            start: chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(start, chrono::Utc),
+            duration_micros: end.timestamp_micros() - start.timestamp_micros(),
+            trace_id,
+            parent_id,
+            attributes,
+            metadata,
+            ..Default::default()
+        })
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Trace {
     pub id: String,
@@ -83,8 +155,6 @@ pub struct Trace {
 
 impl Trace {
     #[must_use]
-    /// # Panics
-    /// If we unexpectedly ask for the `parent_id` of a span without a parent.
     pub fn new(root: Span, descendants: Vec<Span>) -> Self {
         /// Build `Vec<Span>` in pre-order (for simpler rendering)
         fn build_tree_vec(
@@ -98,9 +168,16 @@ impl Trace {
                 let mut more_spans = Vec::new();
                 let mut children = children
                     .iter()
-                    .map(|child_id| spans.get(child_id).cloned().expect("id to exist in spans"))
+                    .filter_map(|child_id| match spans.get(child_id).cloned() {
+                        Some(child) => Some(child),
+                        None => {
+                            error!("child {child_id} not found for parent {id}");
+                            None
+                        }
+                    })
                     .collect::<Vec<_>>();
                 children.sort_by_key(|child| child.start);
+
                 for mut child in children {
                     let id = child.id.clone();
                     child.level = level + 1;
@@ -128,13 +205,11 @@ impl Trace {
             .collect::<HashMap<_, _>>();
         let connections: HashMap<String, Vec<String>> =
             descendants.values().fold(HashMap::new(), |mut m, span| {
-                m.entry(
-                    span.parent_id
-                        .clone()
-                        .expect("Span should have a parent id"),
-                )
-                .or_default()
-                .push(span.id.clone());
+                if let Some(parent_id) = span.parent_id.clone() {
+                    m.entry(parent_id).or_default().push(span.id.clone());
+                } else {
+                    error!("attempted to access non-existent parent of {}", span.id);
+                }
                 m
             });
 
